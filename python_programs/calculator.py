@@ -20,3 +20,5 @@ elif operator == '/':
 elif operator == '*':
     result = first_number * second_number
     print(f"Result: {result}")
+else:
+    print(f"Please enter a correct operator(+, -, /, *)")
