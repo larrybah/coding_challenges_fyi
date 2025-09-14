@@ -1,8 +1,0 @@
-Create a Calculator program that accepts two numbers from the user and and operator (+,-,/,*). and calculate the result.
-
-ask the user for the first number
-ask the user for the operator 
-ask the user for the second number 
-handle division by zero error
-handle incorrect operator.
-print result.
