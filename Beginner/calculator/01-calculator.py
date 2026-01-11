@@ -1,28 +1,37 @@
 #!/usr/bin/env python3
 
-"""
-First Attempt:
-Accept user input and calculate result base on the operator provided.
-"""
-
-first_number = int(input("Enter first number: "))
-operator = input("Enter operator(+,-,/,*): ") 
-second_number = int(input("Enter second number: "))
-
-if operator == '+':
-    result = first_number + second_number
-    print(f"{first_number} + {second_number} = {result}")
-elif operator == '-':
-    result = first_number - second_number
-    print(f"{first_number} + {second_number} = {result}")
-elif operator == '/':
-    if second_number == 0:
-        print("Cannot Divide by Zero!")
+def calculator(num1, operator, num2):
+    """Perform calculation based on operator"""
+    if operator == '+':
+        return num1 + num2
+    elif operator == '-':
+        return num1 - num2
+    elif operator == '*':
+        return num1 * num2
+    elif operator == '/':
+        if num2 == 0:
+            return "Error: Division by zero"
+        return num1 / num2
     else:
-        result = first_number / second_number
-        print(f"{first_number} / {second_number} = {result}")
-elif operator == '*':
-    result = first_number * second_number
-    print(f"{first_number} * {second_number} = {result}")
-else:
-    print("Enter a valid Operator(+,-,*,/)!")
+        return "Error: Invalid operator"
+
+def main():
+    print("=== CLI Calculator ===")
+
+    try:
+        """Get first number"""
+        num1 = float(input("Enter first number: "))
+
+        """ Get Operator """
+        operator = input("Enter operator (+ - * /): ").strip()
+
+        """ Validate operator """
+
+        if operator not in ['+', '-', '*', '/']:
+            print ("Error: Invalid Operator. Please use +, -, *, /")
+            return
+
+        """ Get number 2 """
+        num2 =  float("Enter second number: ")
+
+        result = calculator (num1, n)
