@@ -32,6 +32,15 @@ def main():
             return
 
         """ Get number 2 """
-        num2 =  float("Enter second number: ")
+        num2 =  float(input("Enter second number: "))
 
-        result = calculator (num1, n)
+        result = calculator (num1, operator, num2)
+        print(f"\nResult: {num1} {operator} {num2} = {result}")
+
+    except ValueError:
+        print("Error: Please enter a valid numbers")
+    except keyboardInterrupt:
+        print("\n\nCalculator closed.")
+
+if __name__ == "__main__":
+    main()
