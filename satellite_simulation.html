@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satellite Signal Simulator</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+        
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0a0a1f;
+            color: #00ccff;
+            font-family: 'Orbitron', sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        header {
+            background: rgba(0, 20, 40, 0.9);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #00ccff;
+            box-shadow: 0 0 20px rgba(0, 204, 255, 0.5);
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 1.8em;
+            text-shadow: 0 0 10px #00ccff;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        button {
+            background: #001f3f;
+            color: #00ccff;
+            border: 1px solid #00ccff;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Orbitron', sans-serif;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #00ccff;
+            color: #001f3f;
+            box-shadow: 0 0 15px #00ccff;
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        label {
+            font-size: 0.9em;
+        }
+        
+        input[type="range"] {
+            width: 180px;
+        }
+        
+        .main {
+            display: flex;
+            flex: 1;
+            position: relative;
+        }
+        
+        canvas {
+            display: block;
+            background: radial-gradient(circle at center, #001122 0%, #000011 100%);
+        }
+        
+        .side-panel {
+            width: 340px;
+            background: rgba(0, 15, 35, 0.95);
+            border-left: 2px solid #00ccff;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
+        }
+        
+        .station {
+            background: rgba(0, 50, 80, 0.6);
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #00aaee;
+        }
+        
+        .log {
+            height: 260px;
+            background: #000814;
+            border: 1px solid #004466;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 0.85em;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        
+        .signal-bar {
+            height: 8px;
+            background: linear-gradient(90deg, #00ff88, #ffff00, #ff8800);
+            margin-top: 5px;
+            border-radius: 4px;
+            transition: width 0.2s;
+        }
+        
+        .status {
+            font-size: 0.9em;
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .distance {
+            color: #ffcc66;
+            font-size: 0.95em;
+        }
+        
+        .footer {
+            background: rgba(0, 20, 40, 0.9);
+            padding: 8px 20px;
+            font-size: 0.8em;
+            text-align: center;
+            border-top: 1px solid #004466;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🛰️ SATCOM SIM</h1>
+        <div class="controls">
+            <button id="playPause">⏸️ Pause</button>
+            <button id="reset">Reset</button>
+            
+            <div class="slider-container">
+                <label>Speed:</label>
+                <input type="range" id="speedSlider" min="0.2" max="5" step="0.1" value="1">
+                <span id="speedValue">1.0x</span>
+            </div>
+        </div>
+    </header>
+    
+    <div class="main">
+        <canvas id="canvas" width="800" height="600"></canvas>
+        
+        <div class="side-panel">
+            <h2 style="margin-top:0;">Ground Stations</h2>
+            <div id="stations"></div>
+            
+            <h3>Transmission Log</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        Interactive Satellite Communication Simulator • Real-time Distance • Simplified Keplerian Orbit
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Simulation parameters
+        let WIDTH = 800;
+        let HEIGHT = 600;
+        let CENTER_X = WIDTH / 2;
+        let CENTER_Y = HEIGHT / 2;
+        let EARTH_RADIUS = 120;
+        
+        // Real-world scaling (Earth radius \~6371 km)
+        const REAL_EARTH_RADIUS_KM = 6371;
+        const SCALE_KM_PER_PX = REAL_EARTH_RADIUS_KM / EARTH_RADIUS;
+        
+        // Physics
+        let time = 0;
+        let simSpeed = 1.0;
+        let isRunning = true;
+        
+        // Satellite
+        let orbitRadius = 220;
+        let satellite = {
+            angle: 0,
+            speed: 0.015, // radians per frame
+            x: 0,
+            y: 0
+        };
+        
+        // Ground stations
+        let groundStations = [
+            {
+                id: 1,
+                name: "New York",
+                angle: -1.8,
+                x: 0, y: 0,
+                lastSignal: null,
+                strength: 0,
+                color: "#00ffcc",
+                distance: 0
+            },
+            {
+                id: 2,
+                name: "Tokyo",
+                angle: 0.9,
+                x: 0, y: 0,
+                lastSignal: null,
+                strength: 0,
+                color: "#ffcc00",
+                distance: 0
+            },
+            {
+                id: 3,
+                name: "Cape Town",
+                angle: 2.6,
+                x: 0, y: 0,
+                lastSignal: null,
+                strength: 0,
+                color: "#ff66aa",
+                distance: 0
+            }
+        ];
+        
+        // Signals in flight
+        let signals = [];
+        
+        class Signal {
+            constructor(sx, sy, tx, ty, station) {
+                this.startX = sx;
+                this.startY = sy;
+                this.targetX = tx;
+                this.targetY = ty;
+                this.progress = 0;
+                this.station = station;
+                this.distance = Math.hypot(tx - sx, ty - sy);
+                this.birth = time;
+            }
+        }
+        
+        // Log entries
+        let logEntries = [];
+        
+        function addLog(message, type = "info") {
+            const timestamp = new Date().toLocaleTimeString('en-US', {hour12: false});
+            logEntries.unshift(`[${timestamp}] ${message}`);
+            if (logEntries.length > 12) logEntries.pop();
+            
+            const logEl = document.getElementById('log');
+            logEl.innerHTML = logEntries.map(entry => {
+                let color = "#00ccff";
+                if (entry.includes("LOST")) color = "#ff4444";
+                if (entry.includes("Received")) color = "#00ff88";
+                return `<span style="color:\( {color}"> \){entry}</span>`;
+            }).join('<br>');
+        }
+        
+        function updateStationPositions() {
+            groundStations.forEach(station => {
+                const ex = CENTER_X + Math.cos(station.angle) * EARTH_RADIUS;
+                const ey = CENTER_Y + Math.sin(station.angle) * EARTH_RADIUS * 0.7;
+                station.x = ex;
+                station.y = ey;
+            });
+        }
+        
+        function updateSatellite() {
+            satellite.angle += satellite.speed * simSpeed;
+            if (satellite.angle > Math.PI * 2) satellite.angle -= Math.PI * 2;
+            
+            satellite.x = CENTER_X + Math.cos(satellite.angle) * orbitRadius;
+            satellite.y = CENTER_Y + Math.sin(satellite.angle) * orbitRadius * 0.65;
+        }
+        
+        function calculateDistance(satX, satY, station) {
+            const pixelDist = Math.hypot(satX - station.x, satY - station.y);
+            return Math.round(pixelDist * SCALE_KM_PER_PX);
+        }
+        
+        function calculateSignalStrength(distance) {
+            let strength = Math.max(0, 100 - (distance / 2.8));
+            strength *= 0.92;
+            return Math.floor(Math.min(100, Math.max(5, strength)));
+        }
+        
+        function isLineOfSight(satX, satY, station) {
+            const distToCenter = Math.hypot(satX - CENTER_X, satY - CENTER_Y);
+            if (distToCenter < EARTH_RADIUS * 0.9) return false;
+            if (Math.random() < 0.05) return false;
+            return true;
+        }
+        
+        function transmitSignals() {
+            if (Math.random() > 0.92) {
+                groundStations.forEach(station => {
+                    const distance = calculateDistance(satellite.x, satellite.y, station);
+                    if (isLineOfSight(satellite.x, satellite.y, station)) {
+                        const signal = new Signal(
+                            satellite.x, satellite.y,
+                            station.x, station.y,
+                            station
+                        );
+                        signals.push(signal);
+                        addLog(`Signal sent to \( {station.name} ( \){distance} km)`);
+                    } else {
+                        addLog(`Signal to ${station.name} LOST (obstruction)`, "loss");
+                    }
+                });
+            }
+        }
+        
+        function updateSignals() {
+            for (let i = signals.length - 1; i >= 0; i--) {
+                const sig = signals[i];
+                sig.progress += 0.08 * simSpeed;
+                
+                if (sig.progress >= 1) {
+                    const strength = calculateSignalStrength(sig.distance);
+                    sig.station.strength = strength;
+                    sig.station.lastSignal = time;
+                    
+                    addLog(`✅ Received at ${sig.station.name} | Strength: ${strength}%`, "success");
+                    signals.splice(i, 1);
+                }
+            }
+        }
+        
+        function drawEarth() {
+            ctx.save();
+            ctx.shadowBlur = 40;
+            ctx.shadowColor = "#0088ff";
+            
+            ctx.fillStyle = "#0066aa";
+            ctx.beginPath();
+            ctx.ellipse(CENTER_X, CENTER_Y, EARTH_RADIUS, EARTH_RADIUS * 0.75, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = "#00aa44";
+            ctx.beginPath();
+            ctx.ellipse(CENTER_X + 30, CENTER_Y - 20, 45, 25, Math.PI / 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(CENTER_X - 45, CENTER_Y + 35, 35, 22, -Math.PI / 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+            
+            ctx.strokeStyle = "rgba(100, 200, 255, 0.3)";
+            ctx.lineWidth = 18;
+            ctx.beginPath();
+            ctx.ellipse(CENTER_X, CENTER_Y, EARTH_RADIUS + 12, EARTH_RADIUS * 0.75 + 12, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        
+        function drawSatellite() {
+            ctx.strokeStyle = "rgba(0, 180, 255, 0.15)";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.ellipse(CENTER_X, CENTER_Y, orbitRadius, orbitRadius * 0.65, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            ctx.save();
+            ctx.translate(satellite.x, satellite.y);
+            ctx.rotate(satellite.angle + Math.PI / 2);
+            
+            ctx.fillStyle = "#aaaaaa";
+            ctx.fillRect(-18, -4, 36, 8);
+            
+            ctx.fillStyle = "#ccddff";
+            ctx.fillRect(-8, -8, 16, 16);
+            
+            ctx.strokeStyle = "#ffff00";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, -8);
+            ctx.lineTo(0, -22);
+            ctx.stroke();
+            
+            ctx.restore();
+            
+            if (Math.random() > 0.7) {
+                ctx.fillStyle = "rgba(255, 255, 100, 0.8)";
+                ctx.beginPath();
+                ctx.arc(satellite.x, satellite.y - 28, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        function drawStations() {
+            groundStations.forEach(station => {
+                ctx.fillStyle = "#334455";
+                ctx.fillRect(station.x - 8, station.y - 4, 16, 12);
+                
+                ctx.strokeStyle = station.color;
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(station.x, station.y - 12, 18, Math.PI * 0.7, Math.PI * 2.3);
+                ctx.stroke();
+                
+                if (station.strength > 0) {
+                    const alpha = Math.max(0.1, station.strength / 120);
+                    ctx.fillStyle = `rgba(0, 255, 120, ${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(station.x, station.y - 22, 6 + station.strength / 12, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "12px Orbitron";
+                ctx.textAlign = "center";
+                ctx.fillText(station.name, station.x, station.y + 32);
+            });
+        }
+        
+        function drawSignals() {
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = "#88ffff";
+            
+            signals.forEach(sig => {
+                const px = sig.startX + (sig.targetX - sig.startX) * sig.progress;
+                const py = sig.startY + (sig.targetY - sig.startY) * sig.progress;
+                
+                ctx.strokeStyle = `rgba(120, 255, 255, ${1 - sig.progress * 0.6})`;
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(sig.startX, sig.startY);
+                ctx.lineTo(px, py);
+                ctx.stroke();
+                
+                ctx.fillStyle = "#aaffff";
+                ctx.beginPath();
+                ctx.arc(px, py, 5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            ctx.shadowBlur = 0;
+        }
+        
+        function drawBackgroundStars() {
+            ctx.fillStyle = "#ffffff";
+            for (let i = 0; i < 80; i++) {
+                const x = (i * 37 % WIDTH) + Math.sin(time * 0.1 + i) * 3;
+                const y = (i * 23 % HEIGHT) + Math.cos(time * 0.08 + i) * 2;
+                const size = (i % 3 === 0) ? 1.8 : 0.9;
+                ctx.fillRect(x, y, size, size);
+            }
+        }
+        
+        function render() {
+            ctx.clearRect(0, 0, WIDTH, HEIGHT);
+            drawBackgroundStars();
+            drawEarth();
+            drawSignals();
+            drawSatellite();
+            drawStations();
+        }
+        
+        function updateUI() {
+            groundStations.forEach(station => {
+                station.distance = calculateDistance(satellite.x, satellite.y, station);
+            });
+            
+            const container = document.getElementById('stations');
+            container.innerHTML = '';
+            
+            groundStations.forEach(station => {
+                const timeSince = station.lastSignal ? 
+                    (Math.floor((time - station.lastSignal) * 10) / 10) + "s ago" : "No signal";
+                
+                const div = document.createElement('div');
+                div.className = 'station';
+                div.innerHTML = `
+                    <strong>${station.name}</strong><br>
+                    <span class="status">
+                        <span>Last: ${timeSince}</span>
+                    </span>
+                    <div class="distance">Distance: <strong>${station.distance.toLocaleString()} km</strong></div>
+                    <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+                        <span>Signal:</span>
+                        <div style="flex:1; background:#112233; height:12px; border-radius:6px; overflow:hidden;">
+                            <div class="signal-bar" style="width:${station.strength}%"></div>
+                        </div>
+                        <span style="width:42px; text-align:right;">${station.strength}%</span>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+        
+        function gameLoop() {
+            if (!isRunning) {
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+            
+            time += 0.016 * simSpeed;
+            
+            updateSatellite();
+            transmitSignals();
+            updateSignals();
+            updateUI();
+            render();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function init() {
+            if (window.innerWidth < 1100) {
+                WIDTH = 680;
+                canvas.width = WIDTH;
+                CENTER_X = WIDTH / 2;
+            }
+            
+            updateStationPositions();
+            
+            const playBtn = document.getElementById('playPause');
+            playBtn.addEventListener('click', () => {
+                isRunning = !isRunning;
+                playBtn.textContent = isRunning ? "⏸️ Pause" : "▶️ Play";
+            });
+            
+            document.getElementById('reset').addEventListener('click', () => {
+                time = 0;
+                signals = [];
+                satellite.angle = 0;
+                groundStations.forEach(s => {
+                    s.strength = 0;
+                    s.lastSignal = null;
+                });
+                logEntries = [];
+                document.getElementById('log').innerHTML = '';
+                addLog("Simulation reset");
+            });
+            
+            const speedSlider = document.getElementById('speedSlider');
+            const speedValue = document.getElementById('speedValue');
+            
+            speedSlider.addEventListener('input', () => {
+                simSpeed = parseFloat(speedSlider.value);
+                speedValue.textContent = simSpeed.toFixed(1) + "x";
+            });
+            
+            addLog("Satellite system online");
+            addLog("Real-time distance tracking enabled");
+            
+            gameLoop();
+        }
+        
+        window.onload = init;
+    </script>
+</body>
+</html>
